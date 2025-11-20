@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta-name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Lucro</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="param-screen" class="screen">
+    <h1>Simulador de Lucro</h1>
+
+    <div class="field">
+        <label>Investimento Inicial (mínimo R$ 1.440,00)</label>
+        <input id="investimento" type="text" class="money" value="R$ 1.440,00">
+        <span id="warn" class="warn hidden">O mínimo é R$ 1.440,00</span>
+    </div>
+
+    <div class="field">
+        <label>Custo Unitário</label>
+        <input id="custo" type="text" class="money" value="R$ 180,00">
+    </div>
+
+    <div class="field">
+        <label>Ganho Unitário</label>
+        <input id="ganho" type="text" class="money" value="R$ 240,00">
+    </div>
+
+    <div class="field">
+        <label>Renda Líquida Desejada</label>
+        <input id="target" type="text" class="money" value="R$ 12.000,00">
+    </div>
+
+    <div class="field">
+        <label>Oscilação Mensal (0 = sem variação)</label>
+        <input id="variacao" type="text" class="percent" value="0%">
+    </div>
+
+    <button id="start">Simular</button>
+</div>
+
+<div id="sim-screen" class="screen hidden">
+    <h2>Evolução Mensal</h2>
+    <canvas id="chart"></canvas>
+
+    <h3>Registro Mensal</h3>
+    <div id="log"></div>
+
+    <button id="reset">Reiniciar</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
