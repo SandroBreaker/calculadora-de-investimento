@@ -43,6 +43,8 @@ button{
     font-size:3rem;
     cursor:pointer;
     border-radius:6px;
+    margin-top: 4rem;
+    margin-bottom: 5rem;
 }
 
 button:hover{
