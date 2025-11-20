@@ -7,22 +7,30 @@ body{
 }
 
 .screen{
-    max-width:500px;
+    width:90%;
     margin:auto;
 }
 
 .field{
-    margin-bottom:15px;
+    margin-bottom:2.5rem;
+}
+
+h1 {
+	font-size:4rem;
+}
+
+label {
+	font-size: 2rem;
 }
 
 input{
     width:100%;
-    padding:10px;
+    padding:1rem;
     background:#161b22;
     border:1px solid #30363d;
     border-radius:6px;
     color:white;
-    font-size:16px;
+    font-size:1.5rem;
 }
 
 button{
@@ -32,7 +40,7 @@ button{
     background:#238636;
     border:none;
     color:white;
-    font-size:18px;
+    font-size:3rem;
     cursor:pointer;
     border-radius:6px;
 }
@@ -67,12 +75,15 @@ button:hover{
     overflow-y:auto;
     padding:10px;
     box-sizing:border-box;
+    margin-top: 4rem;
+    margin-bottom: 5rem;
 }
 
 #analyticTable{
     max-height:300px;
     overflow-y:auto;
-    margin-top:20px;
+    margin-top:4rem;
+    margin-bottom: 5rem;
 }
 
 /* ============================
@@ -84,18 +95,19 @@ button:hover{
     border:1px solid #30363d;
     padding:15px;
     border-radius:8px;
-    margin-bottom:20px;
+    margin-bottom: 5rem;
 }
 
 #chart{
     width:100% !important;
-    height:260px !important;
+    height:560px !important;
+    margin-bottom: 5rem;
 }
 
 #chartExtras{
     width:100% !important;
     height:180px !important;
-    margin-top:20px;
+    margin-top:4rem;
 }
 
 /* Tabela analítica */
@@ -103,7 +115,8 @@ button:hover{
 #analyticTableInner td{
     border-bottom:1px solid #30363d;
     padding:6px;
-    font-size:12px;
+    font-size:1rem;
+    margin-bottom: 5rem;
 }
 
 /* scrollbar bonito */
