@@ -4,10 +4,11 @@ body{
     font-family:sans-serif;
     margin:0;
     padding:20px;
+    width: 95%
 }
 
 .screen{
-    max-width:95%;
+    max-width:500px;
     margin:auto;
 }
 
