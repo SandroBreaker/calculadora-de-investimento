@@ -1,10 +1,49 @@
-// =======================
-// app.js - Simulador com extras, limite e tabela analítica
-// =======================
+// ==========================================
+// app.js - Core Logic (Refactored & Zero-Bug)
+// ==========================================
+
+const STORAGE_KEY = "simulador_lucro_config_v1";
+const MAX_EXTRAS = 30;
+
+// Referências Globais de Estado
+let chartInstance = null;
+let chartExtrasInstance = null;
+let simulationTimerId = null; // Controla o loop para evitar sobreposição
+let isRunning = false;
 
 // =======================
-// Máscaras
+// Inicialização e Eventos
 // =======================
+
+document.addEventListener("DOMContentLoaded", () => {
+    loadConfig(); // Carrega dados salvos
+    setupInputs();
+});
+
+document.getElementById("start").onclick = startSimulation;
+document.getElementById("reset").onclick = resetSimulation;
+document.getElementById("btnExport").onclick = exportTableToCSV;
+
+// =======================
+// Máscaras e Inputs
+// =======================
+
+function setupInputs() {
+    document.querySelectorAll(".money").forEach(input => {
+        input.addEventListener("input", e => {
+            e.target.value = formatMoney(e.target.value);
+            saveConfig(); // Auto-save
+        });
+    });
+
+    document.querySelectorAll(".percent").forEach(input => {
+        input.addEventListener("input", e => {
+            e.target.value = formatPercent(e.target.value);
+            saveConfig(); // Auto-save
+        });
+    });
+}
+
 function formatMoney(value) {
     let v = String(value).replace(/\D/g, "");
     if (v === "") return "";
@@ -20,278 +59,353 @@ function formatPercent(value) {
     return v + "%";
 }
 
-document.querySelectorAll(".money").forEach(input => {
-    input.addEventListener("input", e => {
-        // mantém o cursor no final — simples e funcional
-        e.target.value = formatMoney(e.target.value);
-    });
-});
-
-document.querySelectorAll(".percent").forEach(input => {
-    input.addEventListener("input", e => {
-        e.target.value = formatPercent(e.target.value);
-    });
-});
-
-// =======================
-// Utils
-// =======================
 function parseMoney(v) {
     if (!v) return 0;
-    return Number(String(v).replace("R$", "").replace(/\./g, "").replace(",", "."));
+    return Number(String(v).replace("R$", "").replace(/\./g, "").replace(",", ".").trim());
 }
 
 function parsePercent(v) {
     if (!v) return 0;
-    return Number(String(v).replace("%", "")) / 100;
+    return Number(String(v).replace("%", "").trim()) / 100;
 }
 
-function createIfMissingExtrasCanvas() {
-    // cria canvas extras se não existir
-    if (!document.getElementById("chartExtras")) {
-        const chart = document.getElementById("chart");
-        const wrapper = chart.parentNode;
-        const c = document.createElement("canvas");
-        c.id = "chartExtras";
-        c.height = 140;
-        c.style.marginTop = "16px";
-        wrapper.appendChild(c);
-    }
+// =======================
+// Persistência (LocalStorage)
+// =======================
+
+function saveConfig() {
+    const config = {
+        investimento: document.getElementById("investimento").value,
+        target: document.getElementById("target").value,
+        variacao: document.getElementById("variacao").value
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
 }
 
-function createIfMissingTable() {
-    // cria tabela analítica se não existir
-    if (!document.getElementById("analyticTable")) {
-        const simScreen = document.getElementById("sim-screen") || document.body;
-        const div = document.createElement("div");
-        div.id = "analyticTable";
-        div.style.marginTop = "16px";
-        div.style.overflowX = "auto";
-        div.innerHTML = `
-            <h3 style="margin:8px 0;">Tabela Analítica</h3>
-            <table id="analyticTableInner" style="width:100%; border-collapse:collapse; font-size:10px;">
-                <thead>
-                    <tr>
-                        <th style="text-align:left; padding:6px; border-bottom:1px solid #333;">Mês</th>
-                        <th style="text-align:right; padding:6px; border-bottom:1px solid #333;">Unidades</th>
-                        <th style="text-align:right; padding:6px; border-bottom:1px solid #333;">Extras</th>
-                        <th style="text-align:right; padding:6px; border-bottom:1px solid #333;">Investimento</th>
-                        <th style="text-align:right; padding:6px; border-bottom:1px solid #333;">Lucro Bruto</th>
-                        <th style="text-align:right; padding:6px; border-bottom:1px solid #333;">Lucro Líquido</th>
-                        <th style="text-align:right; padding:6px; border-bottom:1px solid #333;">Acumulado</th>
-                    </tr>
-                </thead>
-                <tbody id="analyticBody"></tbody>
-            </table>
-        `;
-        // insere antes do log para ficar paralela
-        const log = document.getElementById("log");
-        if (log && log.parentNode) {
-            log.parentNode.insertBefore(div, log);
-        } else {
-            simScreen.appendChild(div);
+function loadConfig() {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+        try {
+            const config = JSON.parse(saved);
+            if(config.investimento) document.getElementById("investimento").value = config.investimento;
+            if(config.target) document.getElementById("target").value = config.target;
+            if(config.variacao) document.getElementById("variacao").value = config.variacao;
+        } catch (e) {
+            console.error("Erro ao carregar config", e);
         }
     }
 }
 
 // =======================
-// Simulação
+// Lógica de Simulação
 // =======================
 
-let chart;          // gráfico principal
-let chartExtras;    // gráfico de extras
-const MAX_EXTRAS = 30; // limite máximo de extras pedido (30)
-
-document.getElementById("start").onclick = () => {
-
+function startSimulation() {
+    // 1. Validação
     const investimento = parseMoney(document.getElementById("investimento").value);
     const custo = parseMoney(document.getElementById("custo").value);
     const ganho = parseMoney(document.getElementById("ganho").value);
     const target = parseMoney(document.getElementById("target").value);
     const variacao = parsePercent(document.getElementById("variacao").value);
 
-    // regra do investimento mínimo (fórmula confirmada)
     const lucroUnit = ganho - custo;
     if (lucroUnit <= 0) {
-        alert("Ganho unitário deve ser maior que custo unitário.");
+        alert("Erro Crítico: Ganho unitário deve ser maior que custo unitário.");
         return;
     }
+
     const unidadesMin = Math.ceil((120 + 2 * custo) / lucroUnit);
     const investimentoMin = unidadesMin * custo;
 
+    const warnEl = document.getElementById("warn");
     if (investimento < investimentoMin) {
-        document.getElementById("warn").classList.remove("hidden");
+        document.getElementById("warn-val").textContent = "R$ " + investimentoMin.toLocaleString('pt-BR', {minimumFractionDigits:2});
+        warnEl.classList.remove("hidden");
         return;
     } else {
-        document.getElementById("warn").classList.add("hidden");
+        warnEl.classList.add("hidden");
     }
 
-    document.getElementById("param-screen").classList.add("hidden");
+    // 2. Prepara UI
+    saveConfig();
+    document.getElementById("start").disabled = true; // Evita duplo clique
     document.getElementById("sim-screen").classList.remove("hidden");
+    
+    // Scroll suave para resultados (mobile UX)
+    if(window.innerWidth < 900) {
+        document.getElementById("sim-screen").scrollIntoView({behavior: "smooth"});
+    }
 
-    // garante elementos extras
-    createIfMissingExtrasCanvas();
-    createIfMissingTable();
+    // 3. Limpa estado anterior
+    stopLoop(); 
+    clearOutputs();
 
-    iniciarSimulacao(investimento, custo, ganho, target, variacao);
-};
+    // 4. Inicia Loop
+    runSimulationLoop(investimento, custo, ganho, target, variacao);
+}
 
-document.getElementById("reset").onclick = () => {
-    location.reload();
-};
+function resetSimulation() {
+    stopLoop();
+    
+    // Esconde painel de resultados
+    document.getElementById("sim-screen").classList.add("hidden");
+    document.getElementById("start").disabled = false;
+    
+    // Opcional: Limpar os campos visuais imediatamente ou manter o último estado?
+    // Mantemos os inputs, limpamos apenas os outputs internos.
+    clearOutputs();
+}
 
+function stopLoop() {
+    isRunning = false;
+    if (simulationTimerId) {
+        clearTimeout(simulationTimerId);
+        simulationTimerId = null;
+    }
+}
 
-function iniciarSimulacao(investInicial, custo, ganho, target, variacao) {
+function clearOutputs() {
+    document.getElementById("analyticBody").innerHTML = "";
+    document.getElementById("log").innerHTML = "";
+    document.getElementById("progress-fill").style.width = "0%";
+    document.getElementById("progress-text").textContent = "0%";
+    
+    if (chartInstance) {
+        chartInstance.destroy();
+        chartInstance = null;
+    }
+    if (chartExtrasInstance) {
+        chartExtrasInstance.destroy();
+        chartExtrasInstance = null;
+    }
+}
 
-    // reset (caso rode várias vezes)
-    const labels = [];
-    const lucroBruto = [];
-    const incrementos = [];
-    const lucroLiquido = [];
-    const extrasData = []; // para chartExtras
-    const analBody = document.getElementById("analyticBody");
-    if (analBody) analBody.innerHTML = "";
-    const logBox = document.getElementById("log");
-    if (logBox) logBox.innerHTML = "";
+// =======================
+// Core Loop
+// =======================
+
+function runSimulationLoop(investInicial, custo, ganho, target, variacao) {
+    isRunning = true;
+    
+    // Dados para Gráficos
+    const dataLabels = [];
+    const dataLucroBruto = [];
+    const dataLucroLiquido = [];
+    const dataIncremento = [];
+    const dataExtras = [];
 
     let mes = 0;
     let investimentoAtual = investInicial;
     let ganhoLiquidoAcumulado = 0;
 
-    // gráfico principal
-    const ctx = document.getElementById("chart");
-    chart = new Chart(ctx, {
-        type: "line",
-        data: {
-            labels,
-            datasets: [
-                { label: "Lucro Bruto", data: lucroBruto, borderWidth: 2, borderColor: "#4ade80", tension:0.25 },
-                { label: "Incremento (R$)", data: incrementos, borderWidth: 2, borderColor: "#3b82f6", tension:0.25 },
-                { label: "Lucro Líquido", data: lucroLiquido, borderWidth: 2, borderColor: "#facc15", tension:0.25 }
-            ]
-        },
-        options: {
-            animation: { duration: 450 },
-            plugins: { legend: { labels: { color: '#fff' } } },
-            scales: {
-                x: { ticks: { color: '#ddd' } },
-                y: { ticks: { color: '#ddd' } }
-            }
-        }
-    });
+    // Inicializa Gráficos Vazios
+    initCharts();
 
-    // gráfico de extras
-    const ctxE = document.getElementById("chartExtras");
-    chartExtras = new Chart(ctxE, {
-        type: "line",
-        data: {
-            labels: [],
-            datasets: [
-                { label: "Unidades Extras por Mês", data: extrasData, borderWidth: 2, borderColor: "#ec4899", tension:0.25, fill:false }
-            ]
-        },
-        options: {
-            animation: { duration: 450 },
-            plugins: { legend: { labels: { color: '#fff' } } },
-            scales: {
-                x: { ticks: { color: '#ddd' } },
-                y: { ticks: { color: '#ddd' }, beginAtZero: true }
-            }
-        }
-    });
+    function step() {
+        if (!isRunning) return; // Safety check
 
-    function ciclo() {
         mes++;
 
-        // possível variação do ganho
+        // Variação aleatória
         let ganhoAjustado = ganho;
         if (variacao > 0) {
+            // Ex: 0.5% -> random entre -0.5% e +0.5%
             let f = (Math.random() * variacao * 2) - variacao;
             ganhoAjustado *= (1 + f);
         }
 
-        // unidades possíveis
+        // Lógica de Negócio
         const unidades = Math.floor(investimentoAtual / custo);
-
-        // cálculo dos lucros
         const bruto = unidades * ganhoAjustado;
         const liquido = unidades * (ganhoAjustado - custo);
 
         ganhoLiquidoAcumulado += liquido;
 
-        // extras: regra linear solicitada: floor(unidades / 10), mínimo 1, com limite máximo
+        // Cálculo Extras
         let unidadesExtras = Math.floor(unidades / 10);
         if (unidadesExtras < 1) unidadesExtras = 1;
         if (unidadesExtras > MAX_EXTRAS) unidadesExtras = MAX_EXTRAS;
 
-        // registro para gráficos e tabela
-        labels.push("Mês " + mes);
-        lucroBruto.push(Number(bruto.toFixed(2)));
-        incrementos.push(Number((custo * unidadesExtras).toFixed(2))); // incremento em R$
-        lucroLiquido.push(Number(liquido.toFixed(2)));
+        // Atualiza Dados
+        dataLabels.push("Mês " + mes);
+        dataLucroBruto.push(bruto);
+        dataLucroLiquido.push(liquido);
+        dataIncremento.push(custo * unidadesExtras);
+        dataExtras.push(unidadesExtras);
 
-        // atualiza gráfico principal
-        chart.update();
+        // Atualiza UI
+        updateCharts(dataLabels, dataLucroBruto, dataLucroLiquido, dataIncremento, dataExtras);
+        updateLog(mes, unidades, unidadesExtras, investimentoAtual, bruto, liquido, ganhoLiquidoAcumulado);
+        updateTable(mes, unidades, unidadesExtras, investimentoAtual, bruto, liquido, ganhoLiquidoAcumulado);
+        updateProgressBar(liquido, target);
 
-        // atualiza gráfico de extras
-        chartExtras.data.labels.push("Mês " + mes);
-        chartExtras.data.datasets[0].data.push(unidadesExtras);
-        chartExtras.update();
-
-        // log (prepend - último primeiro)
-        if (logBox) {
-            const rowHtml = `
-<div class="log-item">
-    <b>Mês ${mes}</b><br>
-    Unidades: ${unidades}<br>
-    Extras: ${unidadesExtras}<br>
-    Investimento: R$ ${investimentoAtual.toFixed(2)}<br>
-    Lucro Bruto: R$ ${bruto.toFixed(2)}<br>
-    Lucro Líquido: R$ ${liquido.toFixed(2)}<br>
-    <b>Acumulado: R$ ${ganhoLiquidoAcumulado.toFixed(2)}</b>
-</div>
-`;
-            logBox.innerHTML = rowHtml + logBox.innerHTML;
-        }
-
-        // tabela analítica (append no topo para ficar sincronizada com log)
-        if (analBody) {
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-                <td style="padding:6px; border-bottom:1px solid #222;">Mês ${mes}</td>
-                <td style="padding:6px; text-align:right; border-bottom:1px solid #222;">${unidades}</td>
-                <td style="padding:6px; text-align:right; border-bottom:1px solid #222;">${unidadesExtras}</td>
-                <td style="padding:6px; text-align:right; border-bottom:1px solid #222;">R$ ${investimentoAtual.toFixed(2)}</td>
-                <td style="padding:6px; text-align:right; border-bottom:1px solid #222;">R$ ${bruto.toFixed(2)}</td>
-                <td style="padding:6px; text-align:right; border-bottom:1px solid #222;">R$ ${liquido.toFixed(2)}</td>
-                <td style="padding:6px; text-align:right; border-bottom:1px solid #222;">R$ ${ganhoLiquidoAcumulado.toFixed(2)}</td>
-            `;
-            // insere no topo da tabela
-            if (analBody.firstChild) analBody.insertBefore(tr, analBody.firstChild);
-            else analBody.appendChild(tr);
-        }
-
-        // aplica incremento no investimento atual: adiciona custo * unidadesExtras
+        // Prepara Próximo Mês
         investimentoAtual += custo * unidadesExtras;
 
-        // continua simulação enquanto lucro líquido < target
-        if (liquido < target) {
-            setTimeout(ciclo, 500);
+        // Verifica Meta
+        if (liquido >= target) {
+            logSuccess(mes, liquido, ganhoLiquidoAcumulado);
+            isRunning = false; // Fim
+            document.getElementById("start").disabled = false;
         } else {
-            // alcançou target — adiciona linha final no log/tabela destacando
-            if (logBox) {
-                const doneHtml = `
-<div class="log-item" style="border-left:4px solid #22c55e; background:#0f1724;">
-    <b>Meta atingida no mês ${mes}</b><br>
-    Lucro Líquido: R$ ${liquido.toFixed(2)}<br>
-    Acumulado: R$ ${ganhoLiquidoAcumulado.toFixed(2)}
-</div>
-`;
-                logBox.innerHTML = doneHtml + logBox.innerHTML;
-            }
+            // Próximo passo
+            simulationTimerId = setTimeout(step, 400); // 400ms delay para animação
         }
     }
 
-    // start
-    ciclo();
+    step();
+}
+
+// =======================
+// UI Updates & Charts
+// =======================
+
+function updateProgressBar(currentLiq, target) {
+    let pct = (currentLiq / target) * 100;
+    if (pct > 100) pct = 100;
+    if (pct < 0) pct = 0;
+    
+    const fill = document.getElementById("progress-fill");
+    const text = document.getElementById("progress-text");
+    
+    fill.style.width = pct.toFixed(1) + "%";
+    text.textContent = pct.toFixed(1) + "%";
+}
+
+function updateTable(mes, un, extra, inv, bru, liq, acum) {
+    const tbody = document.getElementById("analyticBody");
+    const tr = document.createElement("tr");
+    
+    // Formatadores rápidos
+    const m = val => val.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+
+    tr.innerHTML = `
+        <td>${mes}</td>
+        <td class="text-right">${un}</td>
+        <td class="text-right">${extra}</td>
+        <td class="text-right">${m(inv)}</td>
+        <td class="text-right">${m(bru)}</td>
+        <td class="text-right" style="color:#facc15">${m(liq)}</td>
+        <td class="text-right">${m(acum)}</td>
+    `;
+    
+    // Inserir no topo (Prepend)
+    if (tbody.firstChild) tbody.insertBefore(tr, tbody.firstChild);
+    else tbody.appendChild(tr);
+}
+
+function updateLog(mes, un, extra, inv, bru, liq, acum) {
+    const logBox = document.getElementById("log");
+    const m = val => val.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+    
+    const html = `
+        <div class="log-item">
+            <strong>Mês ${mes}</strong> | Unidades: ${un} (+${extra})<br>
+            <span style="color:#8b949e">Inv: ${m(inv)}</span><br>
+            L. Líquido: <strong style="color:#facc15">${m(liq)}</strong>
+        </div>
+    `;
+    logBox.innerHTML = html + logBox.innerHTML;
+}
+
+function logSuccess(mes, liq, acum) {
+    const logBox = document.getElementById("log");
+    const m = val => val.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+    
+    const html = `
+        <div class="log-item log-success">
+            <strong>🚀 META ATINGIDA (Mês ${mes})</strong><br>
+            Renda Mensal: ${m(liq)}<br>
+            Acumulado Total: ${m(acum)}
+        </div>
+    `;
+    logBox.innerHTML = html + logBox.innerHTML;
+}
+
+function initCharts() {
+    const ctx = document.getElementById("chart");
+    const ctxE = document.getElementById("chartExtras");
+
+    Chart.defaults.color = '#8b949e';
+    Chart.defaults.borderColor = '#30363d';
+
+    chartInstance = new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: [],
+            datasets: [
+                { label: "Lucro Líquido", data: [], borderColor: "#facc15", backgroundColor: "rgba(250, 204, 21, 0.1)", borderWidth: 2, tension: 0.3, fill: true },
+                { label: "Lucro Bruto", data: [], borderColor: "#4ade80", borderWidth: 2, tension: 0.3, hidden: true } // Oculto por padrão para limpar a view
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false, // Performance no update loop
+            plugins: { legend: { position: 'top' } },
+            scales: { y: { beginAtZero: true } }
+        }
+    });
+
+    chartExtrasInstance = new Chart(ctxE, {
+        type: "bar", // Mudado para Barra para visualizar melhor a quantidade discreta
+        data: {
+            labels: [],
+            datasets: [
+                { label: "Novas Unidades (Extras)", data: [], backgroundColor: "#a371f7" }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: { y: { beginAtZero: true } }
+        }
+    });
+}
+
+function updateCharts(labels, bruto, liquido, inc, extras) {
+    if(!chartInstance || !chartExtrasInstance) return;
+
+    // Update Main Chart
+    chartInstance.data.labels = labels;
+    chartInstance.data.datasets[0].data = liquido;
+    chartInstance.data.datasets[1].data = bruto;
+    chartInstance.update('none'); // Mode 'none' para performance sem animação pesada a cada frame
+
+    // Update Extras Chart
+    chartExtrasInstance.data.labels = labels;
+    chartExtrasInstance.data.datasets[0].data = extras;
+    chartExtrasInstance.update('none');
+}
+
+// =======================
+// Export CSV
+// =======================
+
+function exportTableToCSV() {
+    const table = document.getElementById("analyticTableInner");
+    if (!table) return;
+
+    let csv = [];
+    const rows = table.querySelectorAll("tr");
+
+    for (let i = 0; i < rows.length; i++) {
+        const row = [], cols = rows[i].querySelectorAll("td, th");
+        for (let j = 0; j < cols.length; j++) {
+            // Limpa texto para CSV (remove R$, pontos de milhar, etc se quiser raw, aqui mantemos formato texto)
+            let data = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, "").replace(/;/g, ",");
+            row.push(data);
+        }
+        csv.push(row.join(";")); // Ponto e vírgula para Excel BR
+    }
+
+    const csvFile = new Blob([csv.join("\n")], { type: "text/csv" });
+    const downloadLink = document.createElement("a");
+    downloadLink.download = "simulacao_lucro.csv";
+    downloadLink.href = window.URL.createObjectURL(csvFile);
+    downloadLink.style.display = "none";
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
 }
