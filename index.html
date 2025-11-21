@@ -2,52 +2,111 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta-name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulador de Lucro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Lucro Pro</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-<div id="param-screen" class="screen">
-    <h1>Simulador de Lucro</h1>
+<div class="app-container">
+    
+    <aside id="param-screen" class="panel control-panel">
+        <div class="header-box">
+            <h1>Simulador de Lucro</h1>
+            <p class="subtitle">Planejamento Estratégico</p>
+        </div>
 
-    <div class="field">
-        <label>Investimento Inicial (mínimo R$ 1.440,00)</label>
-        <input id="investimento" type="text" class="money" value="R$ 1.440,00">
-        <span id="warn" class="warn hidden">O mínimo é R$ 1.440,00</span>
-    </div>
+        <div class="field">
+            <label>Investimento Inicial</label>
+            <input id="investimento" type="text" class="money" value="R$ 1.440,00">
+            <span id="warn" class="warn hidden">Mínimo necessário: <span id="warn-val"></span></span>
+        </div>
 
-    <div class="field">
-        <label>Custo Unitário</label>
-        <input id="custo" type="text" class="money" value="R$ 180,00" readonly>
-    </div>
+        <div class="row-group">
+            <div class="field">
+                <label>Custo Unit.</label>
+                <input id="custo" type="text" class="money" value="R$ 180,00" readonly>
+            </div>
+            <div class="field">
+                <label>Ganho Unit.</label>
+                <input id="ganho" type="text" class="money" value="R$ 240,00" readonly>
+            </div>
+        </div>
 
-    <div class="field">
-        <label>Ganho Unitário</label>
-        <input id="ganho" type="text" class="money" value="R$ 240,00" readonly>
-    </div>
+        <div class="field">
+            <label>Renda Líquida Meta</label>
+            <input id="target" type="text" class="money" value="R$ 12.000,00">
+        </div>
 
-    <div class="field">
-        <label>Renda Líquida Desejada</label>
-        <input id="target" type="text" class="money" value="R$ 12.000,00">
-    </div>
+        <div class="field">
+            <label>Oscilação Mensal (+/-)</label>
+            <input id="variacao" type="text" class="percent" value="0.5%">
+        </div>
 
-    <div class="field">
-        <label>Oscilação Mensal (0 = sem variação)</label>
-        <input id="variacao" type="text" class="percent" value="0.5%">
-    </div>
+        <button id="start" class="btn-primary">Simular Cenário</button>
+    </aside>
 
-    <button id="start">Simular</button>
-</div>
+    <main id="sim-screen" class="panel results-panel hidden">
+        
+        <div class="status-bar-container">
+            <div class="status-info">
+                <span>Progresso da Meta</span>
+                <span id="progress-text">0%</span>
+            </div>
+            <div class="progress-track">
+                <div id="progress-fill" class="progress-fill" style="width: 0%;"></div>
+            </div>
+        </div>
 
-<div id="sim-screen" class="screen hidden">
-    <h2>Evolução Mensal</h2>
-    <canvas id="chart"></canvas>
+        <div class="charts-wrapper">
+            <div class="chart-box">
+                <h3>Evolução Financeira</h3>
+                <div class="canvas-container main-chart-h">
+                    <canvas id="chart"></canvas>
+                </div>
+            </div>
+            <div class="chart-box">
+                <h3>Escalabilidade (Unidades Extras)</h3>
+                <div class="canvas-container extra-chart-h">
+                    <canvas id="chartExtras"></canvas>
+                </div>
+            </div>
+        </div>
 
-    <h3>Registro Mensal</h3>
-    <div id="log"></div>
+        <div class="data-wrapper">
+            
+            <div class="data-box">
+                <div class="box-header">
+                    <h3>Tabela Analítica</h3>
+                    <button id="btnExport" class="btn-small">Exportar CSV</button>
+                </div>
+                <div class="table-scroll">
+                    <table id="analyticTableInner">
+                        <thead>
+                            <tr>
+                                <th>Mês</th>
+                                <th class="text-right">Unidades</th>
+                                <th class="text-right">Extras</th>
+                                <th class="text-right">Investimento</th>
+                                <th class="text-right">Lucro Bruto</th>
+                                <th class="text-right">Lucro Líquido</th>
+                                <th class="text-right">Acumulado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="analyticBody"></tbody>
+                    </table>
+                </div>
+            </div>
 
-    <button id="reset">Reiniciar</button>
+            <div class="data-box">
+                <h3>Registro de Eventos</h3>
+                <div id="log"></div>
+            </div>
+        </div>
+
+        <button id="reset" class="btn-secondary">Nova Simulação</button>
+    </main>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
